@@ -1,0 +1,189 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1">
+  <title>DPD – iPhone Scanner</title>
+
+  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 18px;
+      font-family: Arial, sans-serif;
+      background: #f1f4f8;
+      color: #243246;
+    }
+    main {
+      max-width: 560px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 14px;
+    }
+    h1 { font-size: 23px; }
+    video {
+      width: 100%;
+      background: #111;
+      border-radius: 10px;
+      margin-top: 12px;
+    }
+    button {
+      display: block;
+      width: 100%;
+      padding: 15px;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 9px;
+      font-size: 16px;
+      color: white;
+      background: #d71930;
+    }
+    .dark { background: #243b53; }
+    #status {
+      margin-top: 15px;
+      overflow-wrap: anywhere;
+    }
+    #result {
+      font-size: 22px;
+      font-weight: bold;
+      text-align: center;
+      margin-top: 18px;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+
+<body>
+<main>
+  <h1>📦 DPD – iPhone LIVE Scanner</h1>
+  <p>Barcode mit der iPhone-Kamera scannen.</p>
+
+  <button id="startBtn" onclick="startScanner()">
+    📷 Kamera starten
+  </button>
+
+  <video id="video" autoplay muted playsinline></video>
+
+  <button class="dark" onclick="stopScanner()">
+    ■ Kamera stoppen
+  </button>
+
+  <p id="status">Bereit zum Scannen.</p>
+  <div id="result"></div>
+
+  <button id="copyBtn" class="dark"
+          style="display:none"
+          onclick="copyNumber()">
+    Paketnummer kopieren
+  </button>
+</main>
+
+<script>
+"use strict";
+
+let reader = null;
+let foundNumber = "";
+
+function normalizeDPD(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+
+  if (/^0608\d{10}$/.test(digits)) {
+    return digits;
+  }
+
+  if (/^0608\d{10}101$/.test(digits)) {
+    return digits.slice(0, 14);
+  }
+
+  return "";
+}
+
+function setStatus(message) {
+  document.getElementById("status").textContent = message;
+}
+
+function stopScanner() {
+  if (reader) {
+    try { reader.reset(); } catch (e) {}
+    reader = null;
+  }
+
+  const video = document.getElementById("video");
+
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+}
+
+async function startScanner() {
+  stopScanner();
+  foundNumber = "";
+
+  document.getElementById("result").textContent = "";
+  document.getElementById("copyBtn").style.display = "none";
+
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Kamera nicht verfügbar.");
+    }
+
+    if (!window.ZXing?.BrowserMultiFormatReader) {
+      throw new Error("ZXing konnte nicht geladen werden.");
+    }
+
+    reader = new ZXing.BrowserMultiFormatReader();
+
+    setStatus("Kamera wird gestartet...");
+
+    await reader.decodeFromVideoDevice(
+      undefined,
+      document.getElementById("video"),
+      result => {
+        if (!result || foundNumber) return;
+
+        const number = normalizeDPD(result.getText());
+
+        if (!number) return;
+
+        foundNumber = number;
+        stopScanner();
+
+        document.getElementById("result").textContent =
+          number;
+
+        document.getElementById("copyBtn").style.display =
+          "block";
+
+        setStatus("Paketnummer erkannt. Bitte prüfen.");
+      }
+    );
+
+    if (!foundNumber) {
+      setStatus("Barcode vor die Kamera halten...");
+    }
+
+  } catch (error) {
+    stopScanner();
+    setStatus("Fehler: " + error.message);
+  }
+}
+
+async function copyNumber() {
+  if (!foundNumber) return;
+
+  try {
+    await navigator.clipboard.writeText(foundNumber);
+    setStatus("Paketnummer kopiert!");
+  } catch (error) {
+    setStatus("Bitte Nummer markieren und manuell kopieren.");
+  }
+}
+</script>
+</body>
+</html>
